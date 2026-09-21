@@ -59,6 +59,12 @@ export function validatePermissions(
     "chart:read",
     "vault:read",
     "governance:read",
+    // User-app scopes (install-to-user-account apps)
+    "user:identity",
+    "user:balance",
+    "payments:charge",
+    "storage:upload",
+    "trading:agent",
   ]);
 
   const valid: ModulePermission[] = [];

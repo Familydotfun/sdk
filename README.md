@@ -99,7 +99,7 @@ const ok = await sdk.ui.modal({
 | Native (platform only) | Trading dashboards, swipe/discovery, turn-based & idle games, polls, paid content, AI pay-per-use | this SDK |
 | With your own backend | Real-time multiplayer, Unity/WebGL games, marketplaces with search, social at scale | this SDK + your API (validate the launch JWT) |
 | On-chain apps | Lending, prediction markets, minting, in-game assets | `contract.invoke` with declared contracts |
-| Custodial trading (e.g. Hyperliquid) | Perps frontends | `trading:agent` scope (trade-only keys, never withdrawals) |
+| Trading via agent keys (e.g. Hyperliquid-style perps) | Perps/trading frontends | `trading:agent` — the scope and its metadata ship today (trade-only keys, never withdrawals); the host-signed reference integration is rolling out, so budget integration work |
 
 The sandbox cannot touch host cookies or DOM, has no `localStorage`/`IndexedDB` of its own, and cannot move money outside `charge()` or declared contract calls. Anything a website can do, an app can do — apps may call their own servers freely (CORS permitting) and validate the launch JWT to authenticate users.
 
@@ -155,9 +155,20 @@ Ask for the minimum. Install prompts group scopes by risk and apps are badged by
 
 ## API surface
 
-`init` · `getContext` · `getPermissions` · `requestPermission` · `identity.*` · `house.*` · `profile.*` · `chart.*` (prices/OHLCV/trades) · `vault.*` · `governance.*` · `social.*` (posts/comments/polls) · `wiki.*` · `campaigns.*` · `thesis.*` · `products.*` · `treasury.*` · `payments.*` (tip/escrow/charge) · `contract.invoke` · `store.*` · `storage.upload` · `ui.*`
+Two surfaces share one SDK:
 
-Every method returns a Promise; failures reject with `Error` or resolve `{ ok: false, error }` — check `ok` on money/social calls.
+- **App APIs** — what app developers build on: `init` · `getContext` ·
+  `getPermissions` · `requestPermission` · `identity.*` · `store.*` ·
+  `payments.charge` · `storage.upload` · `ui.*`
+- **Family-module APIs** — used by modules installed on a family, not by
+  standalone apps: `house.*` · `profile.*` · `chart.*` (prices/OHLCV/trades) ·
+  `vault.*` · `governance.*` · `social.*` (posts/comments/polls) · `wiki.*` ·
+  `campaigns.*` · `thesis.*` · `products.*` · `treasury.*` · `payments.*`
+  (tip/escrow) · `contract.invoke`
+
+Error model: money and social calls resolve `{ ok: false, error }` for business
+failures (they never throw), while infrastructure failures — bridge timeout,
+unknown method, dispose — reject the promise. Check `ok` on money/social calls.
 
 ## The bridge protocol
 
@@ -166,7 +177,7 @@ The SDK speaks a small `postMessage` protocol with the host:
 - outbound `{ type: "FAMILY:CALL", id, namespace: "family-sdk", payload: { method, args } }`
 - inbound `{ namespace: "family-sdk", type: "FAMILY:CALL:RESPONSE", id, payload | error }`
 
-Origin-pinned both directions; 30s call timeout; `init()` carries the SDK version for negotiation. You almost never need this — but it's how the mock host and alternative clients work.
+Origin-pinned both directions; 30s call timeout; `init()` carries the SDK version for negotiation. You almost never need this — but it's how the mock host and alternative clients work. Full spec: [./PROTOCOL.md](./PROTOCOL.md).
 
 ## Development loop
 
@@ -192,7 +203,7 @@ Publishing today goes through the Family developer UI: create the app, a family 
 ## Links
 
 - Platform: https://getfamily.fun
-- Full architecture & plan docs: [Familydotfun/familydotfun `docs/PRODUCT_SDK.md`](https://github.com/Familydotfun/familydotfun/blob/main/docs/PRODUCT_SDK.md)
+- Bridge protocol (message envelope, origin pinning, timeout, init negotiation, launch JWT): [./PROTOCOL.md](./PROTOCOL.md)
 - Issues & contributions: this repo
 
 ## License

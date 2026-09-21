@@ -64,10 +64,26 @@ function getParentOrigin(): string {
       /* fall through */
     }
   }
-  if (typeof window !== "undefined") {
-    return window.location.origin;
+  const ancestorOrigins = (
+    window.location as Location & { ancestorOrigins?: DOMStringList }
+  ).ancestorOrigins;
+  if (ancestorOrigins && ancestorOrigins.length > 0) {
+    return ancestorOrigins[0];
   }
-  return "*";
+  throw new Error(
+    "Family SDK: cannot resolve parent origin — no document.referrer and no window.location.ancestorOrigins"
+  );
+}
+
+/** Uniquely identify one bridge call. */
+function makeCallId(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+  return `call-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
@@ -78,15 +94,26 @@ export function createFamilySDK(targetWindow?: Window): FamilySDK {
   const parent = targetWindow ?? window.parent;
   const pending = new Map<
     string,
-    { resolve: (value: unknown) => void; reject: (reason?: Error) => void }
+    {
+      resolve: (value: unknown) => void;
+      reject: (reason?: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
   >();
 
   function call<T>(method: string, args: unknown[]): Promise<T> {
     return new Promise((resolve, reject) => {
-      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const id = makeCallId();
+      const timer = setTimeout(() => {
+        if (pending.has(id)) {
+          pending.delete(id);
+          reject(new Error(`Family SDK call timed out: ${method}`));
+        }
+      }, 30_000);
       pending.set(id, {
         resolve: (value) => resolve(value as T),
         reject,
+        timer,
       });
 
       const payload: HouseCallPayload = { method, args };
@@ -98,38 +125,49 @@ export function createFamilySDK(targetWindow?: Window): FamilySDK {
       };
 
       parent.postMessage(msg, getParentOrigin());
-
-      // Timeout after 30s
-      setTimeout(() => {
-        if (pending.has(id)) {
-          pending.delete(id);
-          reject(new Error(`Family SDK call timed out: ${method}`));
-        }
-      }, 30_000);
     });
   }
 
+  function onMessage(event: MessageEvent) {
+    // Only trust messages from our direct parent — nested iframes or injected
+    // scripts must not be able to fake a FAMILY:CALL:RESPONSE.
+    if (event.source !== parent) return;
+    const data = event.data as HouseAppMessage | undefined;
+    if (!data || data.namespace !== "family-sdk") return;
+    if (data.type !== "FAMILY:CALL:RESPONSE") return;
+
+    const handler = pending.get(data.id);
+    if (!handler) return;
+    pending.delete(data.id);
+    clearTimeout(handler.timer);
+
+    if (data.error) {
+      handler.reject(new Error(data.error));
+    } else {
+      handler.resolve(data.payload);
+    }
+  }
+
+  let listening = false;
   function listen() {
-    window.addEventListener("message", (event) => {
-      const data = event.data as HouseAppMessage | undefined;
-      if (!data || data.namespace !== "family-sdk") return;
-      if (data.type !== "FAMILY:CALL:RESPONSE") return;
+    if (listening) return;
+    listening = true;
+    window.addEventListener("message", onMessage);
+  }
 
-      const handler = pending.get(data.id);
-      if (!handler) return;
-      pending.delete(data.id);
-
-      if (data.error) {
-        handler.reject(new Error(data.error));
-      } else {
-        handler.resolve(data.payload);
-      }
-    });
+  function dispose() {
+    window.removeEventListener("message", onMessage);
+    for (const handler of pending.values()) {
+      clearTimeout(handler.timer);
+      handler.reject(new Error("Family SDK disposed"));
+    }
+    pending.clear();
   }
 
   listen();
 
   return {
+    dispose,
     init: (sdkVersion?: string) =>
       call<InitResult>("init", [sdkVersion ?? SDK_VERSION]),
     getContext: () => call<SDKContext>("getContext", []),

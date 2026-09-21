@@ -1,3 +1,6 @@
 node_modules/
-dist/
 *.log
+# The repo-root .gitignore ignores *.md and dist/ everywhere; re-include the
+# files this package must ship/commit.
+!PROTOCOL.md
+!dist/

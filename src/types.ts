@@ -236,9 +236,17 @@ export interface FamilyVaultHoldings {
   nativeBalance: string;
 }
 
-/** Vault activity entries (spend / transfer proposals). */
+/** One vault activity row. The host returns raw backend proposal records, so
+ * only the common fields are named here; the rest pass through. */
+export interface VaultActivityProposal {
+  id: string;
+  status?: string | null;
+  createdAt: string;
+  [k: string]: unknown;
+}
+
 export interface FamilyVaultActivity {
-  proposals: unknown[];
+  proposals: VaultActivityProposal[];
 }
 
 export interface FamilyProposal {
@@ -693,6 +701,8 @@ export interface FamilySDK {
       cancelLabel?: string;
     }) => Promise<boolean>;
   };
+  /** Tear down the SDK: remove the message listener and reject all pending calls. */
+  dispose: () => void;
 }
 
 // postMessage bridge types
