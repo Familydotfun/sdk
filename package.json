@@ -1,0 +1,35 @@
+{
+  "name": "@familydotfun/sdk",
+  "version": "0.1.0",
+  "description": "Family Product SDK — build modules and apps that run inside Family.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup && tsc -p tsconfig.build.json",
+    "pack": "npm run build && npm pack --pack-destination ../../launchapp/vendor",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "family",
+    "familydotfun",
+    "sdk",
+    "web3"
+  ],
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "^7.0.2"
+  },
+  "module": "./dist/index.js"
+}
