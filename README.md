@@ -12,12 +12,16 @@ Both share one runtime: your code runs in a sandboxed iframe, talks to the host 
 ## Install
 
 ```bash
-npm install github:Familydotfun/sdk
+npm install @familydotfun/sdk
 # or
-pnpm add github:Familydotfun/sdk
+pnpm add @familydotfun/sdk
 ```
 
-> npm registry publishing is coming; the git install tracks `main`.
+Fallback until the registry mirror propagates, or to track `main`:
+
+```bash
+npm install github:Familydotfun/sdk
+```
 
 ## Quickstart
 
@@ -90,49 +94,6 @@ const ok = await sdk.ui.modal({
 });
 ```
 
-### Drive the host chrome (action buttons, header, haptics)
-
-The host renders a native-quality chrome around your app. Nothing shows until
-you drive it — the bars appear and disappear with your state.
-
-```ts
-// Persistent bottom call-to-action with a loading state.
-sdk.chrome.mainButton.setParams({ text: "Buy for 5 USDG" });
-sdk.chrome.mainButton.show();
-sdk.chrome.mainButton.onClick(async () => {
-  sdk.chrome.mainButton.showProgress();
-  const res = await sdk.payments.charge({ /* ... */ });
-  sdk.chrome.mainButton.hideProgress();
-  if (res.ok) sdk.chrome.mainButton.hide();
-});
-
-// Secondary action sits above the main button.
-sdk.chrome.secondaryButton.setParams({ text: "Learn more" });
-sdk.chrome.secondaryButton.show();
-sdk.chrome.secondaryButton.onClick(() => { /* ... */ });
-
-// In-app navigation with a host back control.
-sdk.chrome.backButton.show();
-sdk.chrome.backButton.onClick(() => (window.location.hash = "#"));
-
-// Header title / subtitle / loading progress.
-await sdk.chrome.header.setParams({ title: "Checkout", progress: 0.6 });
-
-// Match the host theme (also pushed live as "themeChanged").
-const theme = await sdk.chrome.theme.get();
-
-// Physical feedback where the device supports it.
-sdk.chrome.haptic.notification("success");
-
-// Lifecycle: first paint done / ask the host to close the runtime.
-await sdk.chrome.ready();
-await sdk.chrome.close();
-```
-
-Host-pushed events: `mainButtonClicked` · `secondaryButtonClicked` ·
-`backButtonClicked` · `themeChanged` · `closed` — subscribe with
-`sdk.chrome.onEvent(event, handler)` (button handles also have `onClick`).
-
 ---
 
 ## What you can build
@@ -202,8 +163,7 @@ Two surfaces share one SDK:
 
 - **App APIs** — what app developers build on: `init` · `getContext` ·
   `getPermissions` · `requestPermission` · `identity.*` · `store.*` ·
-  `payments.charge` · `storage.upload` · `ui.*` · `chrome.*` (host chrome:
-  header, main/secondary action buttons, back button, haptics, theme, lifecycle)
+  `payments.charge` · `storage.upload` · `ui.*`
 - **Family-module APIs** — used by modules installed on a family, not by
   standalone apps: `house.*` · `profile.*` · `chart.*` (prices/OHLCV/trades) ·
   `vault.*` · `governance.*` · `social.*` (posts/comments/polls) · `wiki.*` ·
