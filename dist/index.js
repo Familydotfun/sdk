@@ -392,6 +392,19 @@ function createFamilySDK(targetWindow) {
     if (event.source !== parent) return;
     const data = event.data;
     if (!data || data.namespace !== "family-sdk") return;
+    if (data.type === "FAMILY:EVENT") {
+      const evt = data.payload;
+      if (!evt?.event) return;
+      const handlers = eventHandlers.get(evt.event);
+      if (!handlers) return;
+      for (const handler2 of [...handlers]) {
+        try {
+          handler2(evt.data);
+        } catch {
+        }
+      }
+      return;
+    }
     if (data.type !== "FAMILY:CALL:RESPONSE") return;
     const handler = pending.get(data.id);
     if (!handler) return;
@@ -402,6 +415,42 @@ function createFamilySDK(targetWindow) {
     } else {
       handler.resolve(data.payload);
     }
+  }
+  const eventHandlers = /* @__PURE__ */ new Map();
+  function subscribe(event, handler) {
+    let set = eventHandlers.get(event);
+    if (!set) {
+      set = /* @__PURE__ */ new Set();
+      eventHandlers.set(event, set);
+    }
+    set.add(handler);
+  }
+  function unsubscribe(event, handler) {
+    const set = eventHandlers.get(event);
+    if (!set) return;
+    set.delete(handler);
+    if (set.size === 0) eventHandlers.delete(event);
+  }
+  function makeButton(methodPrefix, clickEvent) {
+    return {
+      setParams: (params) => call(`${methodPrefix}.setParams`, [params]),
+      show: () => call(`${methodPrefix}.show`, []),
+      hide: () => call(`${methodPrefix}.hide`, []),
+      enable: () => call(`${methodPrefix}.enable`, []),
+      disable: () => call(`${methodPrefix}.disable`, []),
+      showProgress: () => call(`${methodPrefix}.showProgress`, []),
+      hideProgress: () => call(`${methodPrefix}.hideProgress`, []),
+      onClick: (handler) => subscribe(clickEvent, handler),
+      offClick: (handler) => unsubscribe(clickEvent, handler)
+    };
+  }
+  function makeBackButton() {
+    return {
+      show: () => call("chrome.backButton.show", []),
+      hide: () => call("chrome.backButton.hide", []),
+      onClick: (handler) => subscribe("backButtonClicked", handler),
+      offClick: (handler) => unsubscribe("backButtonClicked", handler)
+    };
   }
   let listening = false;
   function listen() {
@@ -525,6 +574,26 @@ function createFamilySDK(targetWindow) {
         void call("ui.toast", [message, type]);
       },
       modal: (options) => call("ui.modal", [options])
+    },
+    chrome: {
+      ready: () => call("chrome.ready", []),
+      close: () => call("chrome.close", []),
+      header: {
+        setParams: (params) => call("chrome.header.setParams", [params])
+      },
+      mainButton: makeButton("chrome.mainButton", "mainButtonClicked"),
+      secondaryButton: makeButton("chrome.secondaryButton", "secondaryButtonClicked"),
+      backButton: makeBackButton(),
+      haptic: {
+        impact: (style) => call("chrome.haptic.impact", [style]),
+        notification: (type) => call("chrome.haptic.notification", [type]),
+        selection: () => call("chrome.haptic.selection", [])
+      },
+      theme: {
+        get: () => call("chrome.theme.get", [])
+      },
+      onEvent: (event, handler) => subscribe(event, handler),
+      offEvent: (event, handler) => unsubscribe(event, handler)
     }
   };
 }

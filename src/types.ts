@@ -596,6 +596,102 @@ export interface HouseAppInstall {
   paused: boolean;
 }
 
+/** Persistent bottom action button controlled by the hosted app. */
+export interface ChromeButtonParams {
+  text: string;
+  /** Custom background color (css). Falls back to the host accent. */
+  color?: string;
+  /** Custom label color (css). Falls back to the host accent ink. */
+  textColor?: string;
+  isVisible?: boolean;
+  /** False renders the button dimmed and non-clickable. */
+  isActive?: boolean;
+  /** True shows a spinner in place of the label. */
+  isProgressVisible?: boolean;
+}
+
+/** Runtime chrome header the hosted app can drive. */
+export interface ChromeHeaderParams {
+  title?: string;
+  subtitle?: string;
+  /** Custom header background (css). Falls back to the host surface. */
+  color?: string;
+  /** 0..1 loading progress bar; omit to hide. */
+  progress?: number;
+}
+
+export type ChromeHapticImpact = "light" | "medium" | "heavy" | "rigid" | "soft";
+export type ChromeHapticNotification = "error" | "success" | "warning";
+
+/** Host theme snapshot handed to apps so they can restyle to match. */
+export interface ChromeTheme {
+  colorScheme: "light" | "dark";
+  bgColor: string;
+  textColor: string;
+  hintColor: string;
+  buttonColor: string;
+  buttonTextColor: string;
+}
+
+/** Events the host pushes to the app (FAMILY:EVENT). */
+export type ChromeEventType =
+  | "mainButtonClicked"
+  | "secondaryButtonClicked"
+  | "backButtonClicked"
+  | "themeChanged"
+  | "closed";
+
+export interface ChromeEventMessage {
+  event: ChromeEventType;
+  data?: unknown;
+}
+
+export interface ChromeButtonHandle {
+  setParams: (params: ChromeButtonParams) => Promise<void>;
+  show: () => Promise<void>;
+  hide: () => Promise<void>;
+  enable: () => Promise<void>;
+  disable: () => Promise<void>;
+  showProgress: () => Promise<void>;
+  hideProgress: () => Promise<void>;
+  onClick: (handler: () => void) => void;
+  offClick: (handler: () => void) => void;
+}
+
+export interface ChromeBackButton {
+  show: () => Promise<void>;
+  hide: () => Promise<void>;
+  onClick: (handler: () => void) => void;
+  offClick: (handler: () => void) => void;
+}
+
+/**
+ * Host chrome: header, action buttons, back navigation, haptics, theme sync
+ * and lifecycle. Rendered by the host runtime around the app surface.
+ */
+export interface ChromeNamespace {
+  /** App finished its first render — the host may hide its loading state. */
+  ready: () => Promise<{ ok: boolean }>;
+  /** Ask the host to close the app runtime. */
+  close: () => Promise<{ ok: boolean }>;
+  header: {
+    setParams: (params: ChromeHeaderParams) => Promise<void>;
+  };
+  mainButton: ChromeButtonHandle;
+  secondaryButton: ChromeButtonHandle;
+  backButton: ChromeBackButton;
+  haptic: {
+    impact: (style: ChromeHapticImpact) => Promise<void>;
+    notification: (type: ChromeHapticNotification) => Promise<void>;
+    selection: () => Promise<void>;
+  };
+  theme: {
+    get: () => Promise<ChromeTheme>;
+  };
+  onEvent: (event: ChromeEventType, handler: (data?: unknown) => void) => void;
+  offEvent: (event: ChromeEventType, handler: (data?: unknown) => void) => void;
+}
+
 export interface FamilySDK {
   init: (sdkVersion?: string) => Promise<InitResult>;
   getContext: () => Promise<SDKContext>;
@@ -701,6 +797,7 @@ export interface FamilySDK {
       cancelLabel?: string;
     }) => Promise<boolean>;
   };
+  chrome: ChromeNamespace;
   /** Tear down the SDK: remove the message listener and reject all pending calls. */
   dispose: () => void;
 }

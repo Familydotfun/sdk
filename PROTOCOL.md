@@ -62,6 +62,32 @@ or, on failure:
 - `error` present → the app's promise **rejects** with `new Error(error)`.
 - Method names are dot-namespaced (`store.get`, `payments.charge`, …).
 
+## Host events (chrome)
+
+Chrome is the host-rendered UI around the app (header, action buttons, back
+button). Calls like `chrome.mainButton.setParams` mutate host UI state; user
+interaction flows back as unsolicited `FAMILY:EVENT` messages on the same
+channel:
+
+```json
+{
+  "type": "FAMILY:EVENT",
+  "id": "evt-…",
+  "namespace": "family-sdk",
+  "payload": { "event": "mainButtonClicked" }
+}
+```
+
+Defined events: `mainButtonClicked` · `secondaryButtonClicked` ·
+`backButtonClicked` · `themeChanged` (carries a `ChromeTheme` snapshot in
+`payload.data`) · `closed` (sent after the host processes `chrome.close()`).
+
+Host-side rules: events go only to the app frame that owns the channel (the
+source of a prior `FAMILY:CALL`); use `targetOrigin "*"` only when the frame
+reports the opaque origin (`"null"`, i.e. sandboxed without
+`allow-same-origin`). The app accepts events only from its direct parent, like
+responses.
+
 ## Origin pinning
 
 - The app posts calls with `targetOrigin` set to the resolved **parent

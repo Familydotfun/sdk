@@ -5,6 +5,14 @@ import {
   ChargeInput,
   ChargeResult,
   ChargeSplit,
+  ChromeBackButton,
+  ChromeButtonHandle,
+  ChromeButtonParams,
+  ChromeEventMessage,
+  ChromeEventType,
+  ChromeHapticImpact,
+  ChromeHapticNotification,
+  ChromeHeaderParams,
   ContractInvokeResult,
   EscrowInput,
   EscrowResult,
@@ -134,6 +142,23 @@ export function createFamilySDK(targetWindow?: Window): FamilySDK {
     if (event.source !== parent) return;
     const data = event.data as HouseAppMessage | undefined;
     if (!data || data.namespace !== "family-sdk") return;
+
+    // Host-pushed chrome events (button clicks, theme changes, ...).
+    if (data.type === "FAMILY:EVENT") {
+      const evt = data.payload as ChromeEventMessage | undefined;
+      if (!evt?.event) return;
+      const handlers = eventHandlers.get(evt.event);
+      if (!handlers) return;
+      for (const handler of [...handlers]) {
+        try {
+          handler(evt.data);
+        } catch {
+          /* a misbehaving listener must not break the bridge */
+        }
+      }
+      return;
+    }
+
     if (data.type !== "FAMILY:CALL:RESPONSE") return;
 
     const handler = pending.get(data.id);
@@ -146,6 +171,52 @@ export function createFamilySDK(targetWindow?: Window): FamilySDK {
     } else {
       handler.resolve(data.payload);
     }
+  }
+
+  // Local subscriptions for host-pushed chrome events.
+  const eventHandlers = new Map<string, Set<(data?: unknown) => void>>();
+
+  function subscribe(event: ChromeEventType, handler: (data?: unknown) => void) {
+    let set = eventHandlers.get(event);
+    if (!set) {
+      set = new Set();
+      eventHandlers.set(event, set);
+    }
+    set.add(handler);
+  }
+
+  function unsubscribe(event: ChromeEventType, handler: (data?: unknown) => void) {
+    const set = eventHandlers.get(event);
+    if (!set) return;
+    set.delete(handler);
+    if (set.size === 0) eventHandlers.delete(event);
+  }
+
+  function makeButton(
+    methodPrefix: string,
+    clickEvent: ChromeEventType
+  ): ChromeButtonHandle {
+    return {
+      setParams: (params: ChromeButtonParams) =>
+        call(`${methodPrefix}.setParams`, [params]),
+      show: () => call(`${methodPrefix}.show`, []),
+      hide: () => call(`${methodPrefix}.hide`, []),
+      enable: () => call(`${methodPrefix}.enable`, []),
+      disable: () => call(`${methodPrefix}.disable`, []),
+      showProgress: () => call(`${methodPrefix}.showProgress`, []),
+      hideProgress: () => call(`${methodPrefix}.hideProgress`, []),
+      onClick: (handler: () => void) => subscribe(clickEvent, handler),
+      offClick: (handler: () => void) => unsubscribe(clickEvent, handler),
+    };
+  }
+
+  function makeBackButton(): ChromeBackButton {
+    return {
+      show: () => call("chrome.backButton.show", []),
+      hide: () => call("chrome.backButton.hide", []),
+      onClick: (handler: () => void) => subscribe("backButtonClicked", handler),
+      offClick: (handler: () => void) => unsubscribe("backButtonClicked", handler),
+    };
   }
 
   let listening = false;
@@ -304,6 +375,30 @@ export function createFamilySDK(targetWindow?: Window): FamilySDK {
         confirmLabel?: string;
         cancelLabel?: string;
       }) => call<boolean>("ui.modal", [options]),
+    },
+    chrome: {
+      ready: () => call<{ ok: boolean }>("chrome.ready", []),
+      close: () => call<{ ok: boolean }>("chrome.close", []),
+      header: {
+        setParams: (params: ChromeHeaderParams) =>
+          call("chrome.header.setParams", [params]),
+      },
+      mainButton: makeButton("chrome.mainButton", "mainButtonClicked"),
+      secondaryButton: makeButton("chrome.secondaryButton", "secondaryButtonClicked"),
+      backButton: makeBackButton(),
+      haptic: {
+        impact: (style: ChromeHapticImpact) => call("chrome.haptic.impact", [style]),
+        notification: (type: ChromeHapticNotification) =>
+          call("chrome.haptic.notification", [type]),
+        selection: () => call("chrome.haptic.selection", []),
+      },
+      theme: {
+        get: () => call("chrome.theme.get", []),
+      },
+      onEvent: (event: ChromeEventType, handler: (data?: unknown) => void) =>
+        subscribe(event, handler),
+      offEvent: (event: ChromeEventType, handler: (data?: unknown) => void) =>
+        unsubscribe(event, handler),
     },
   };
 }
